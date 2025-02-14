@@ -1,20 +1,36 @@
+# app.py
 from fastapi import FastAPI
 from pydantic import BaseModel
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+from transformers import pipeline
 
 app = FastAPI()
 
-MODEL_NAME = "distilgpt2"
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+# Cargamos un pipeline de question-answering con el modelo de mrm8488
+qa_pipeline = pipeline(
+    "question-answering",
+    model="mrm8488/bert-multi-cased-finetuned-xquadv1",
+    tokenizer="mrm8488/bert-multi-cased-finetuned-xquadv1"
+)
 
-class PromptRequest(BaseModel):
-    prompt: str
+# Modelo Pydantic para la petición
+class QAModel(BaseModel):
+    question: str
+    context: str
 
-@app.post("/generate")
-def generate_text(request: PromptRequest):
-    input_ids = tokenizer.encode(request.prompt, return_tensors="pt")
-    output_ids = model.generate(input_ids, max_length=50)
-    response = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return {"response": response}
+@app.get("/")
+def read_root():
+    return {"message": "La API funciona correctamente."}
+
+@app.post("/answer")
+def get_answer(data: QAModel):
+    """
+    Recibe question y context en español (u otro idioma soportado).
+    Devuelve la mejor respuesta encontrada en el contexto.
+    """
+    result = qa_pipeline({
+        "question": data.question,
+        "context": data.context
+    })
+    # El pipeline retorna algo como:
+    # { "score": 0.99, "start": 20, "end": 25, "answer": "París" }
+    return {"answer": result["answer"], "score": result["score"]}
